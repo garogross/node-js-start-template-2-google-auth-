@@ -75,21 +75,49 @@ export const checkIfFieldsAreUpdatable = (req, res, next) => {
 
 //////////////
 
-export const signUpWithGoogle = catchAsync(async (req,res) => {
+export const signUpWithGoogle = catchAsync(async (req, res) => {
+    if (req.user && req.user.id) {
+        let curUser = await User.find({googleId: req.user.id})
+        if (!curUser.length) {
+            const {name, email, picture, sub} = req.user._json
+            curUser = await User.create({
+                    name,
+                    email,
+                    role: 'guide',
+                    photo: picture,
+                    googleId: sub
+                }
+            )
+
+        }
+        const token = signToken(curUser._id)
+        const tokenOptions = {
+            expires: new Date(
+                Date.now() + parseInt(process.env.JWT_EXPIRES_IN) * 24 * 60 * 60 * 1000
+            ),
+            httponly: true
+        }
+
+        res.cookie('jwt', token, tokenOptions)
+    } else {
+        res.cookie('google-auth-error', "Authentication failed")
+    }
     res.redirect(process.env.CLIENT_URL)
 })
 
-export const signUp = catchAsync(async (req, res) => {
+export const signUp = catchAsync(async (req, res,next) => {
     const {name, email, password, passwordConfirm, role} = req.body
-    const user = await User.create({name, email, password, passwordConfirm, role})
+    if(!password || password !== passwordConfirm) {
+        return next(new AppError('incorrect password or passwordConfirm', 401))
+    }
 
+    const user = await User.create({name, email, password, passwordConfirm, role})
     const token = signToken(user._id)
     const {
         password: pass,
         __v,
         ...userData
-        } = {...user.toObject()};
-
+    } = {...user.toObject()};
 
     res.send({
         status: 'success',
@@ -126,6 +154,9 @@ export const forgotPassword = catchAsync(async (req, res, next) => {
     if (!user) {
         return next(new AppError('There is no user with email address', 404))
     }
+    if (user.googleId) {
+        return next(new AppError('You can\'t change your password because you signed up with Google', 404))
+    }
 
     const resetToken = user.createPasswordResetToken()
     await user.save({validateBeforeSave: false})
@@ -133,14 +164,13 @@ export const forgotPassword = catchAsync(async (req, res, next) => {
     const resetUrl = `${req.protocol}://${req.get('host')}/api/v1/users/resetPassword/${resetToken}`
 
     try {
-        await new Email(user,resetUrl).sendForgotPass()
+        await new Email(user, resetUrl).sendForgotPass()
 
         res.status(200).json({
             status: 'success',
             message: 'Token sent to email'
         })
     } catch (err) {
-        console.log("ERR",err)
         user.passwordResetToken = undefined
         user.passwordResetExpires = undefined
     }
@@ -158,6 +188,11 @@ export const resetPassword = catchAsync(async (req, res, next) => {
     if (!user) {
         return next(new AppError('Token is invalid or has expired', 400))
     }
+
+    if (user.googleId) {
+        return next(new AppError('You can\'t change your password because you signed up with Google', 400))
+    }
+
     user.password = req.body.password
     user.passwordConfirm = req.body.passwordConfirm
     user.passwordResetToken = undefined

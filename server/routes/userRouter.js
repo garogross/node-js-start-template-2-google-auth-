@@ -31,7 +31,12 @@ authRouter.get(
 )
 ///////
 
-userRouter.post('/signup', signUp)
+userRouter.post(
+    '/signup',
+    uploadImageFile,
+    resizeUserImage,
+    signUp
+)
 userRouter.post('/login', login)
 userRouter.post('/forgotPassword', forgotPassword)
 userRouter.patch('/resetPassword/:token', resetPassword)

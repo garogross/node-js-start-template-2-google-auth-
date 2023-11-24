@@ -17,18 +17,16 @@ export const userSchema = new mongoose.Schema({
     photo: String,
     role: {
         type: String,
-        enum: ["user",'admin','guide','lead-guide'],
-        default: 'user'
+        enum: ["buyer",'admin','seller','guide'],
+        default: 'buyer'
     },
     password: {
         type: String,
-        required: [true,'Password is required'],
         minlength: 5,
         select: false,
     },
     passwordConfirm : {
         type: String,
-        required: [true,'Password Confirm is required'],
         minlength: 5,
         validate: {
             validator: function(val) {
@@ -44,7 +42,8 @@ export const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true,
         select: false
-    }
+    },
+    googleId: String
 })
 
 // hash password
@@ -58,7 +57,6 @@ userSchema.pre('save',async function(next){
 //
 userSchema.pre('save', function (next) {
     if(!this.isModified('password') || this.isNew) return next()
-    console.log('is changing',!this.isModified('password'),this.isNew)
     this.passwordChangedAt = Date.now() - 1000
     next()
 })
